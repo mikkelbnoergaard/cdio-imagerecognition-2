@@ -12,7 +12,7 @@ blur_strength = 5
 
 # Timeout in frames (5 seconds * 30 FPS) - adjust for desired clear interval
 detection_timeout = 5
-clear_interval = 10  # Frames to wait for complete list clear (20 seconds)
+clear_interval = 10  # Frames to wait for complete list clear
 
 cap = cv2.VideoCapture(1)
 
