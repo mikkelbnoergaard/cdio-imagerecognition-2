@@ -2,27 +2,29 @@ import cv2
 import numpy as np
 import time
 
+from main import turn_360
+
 min_radius = 5
 max_radius = 15
 min_distance = 5
 dp = 1
-param1 = 20
+param1 = 25
 param2 = 23
 blur_strength = 5
 
-# Timeout in frames (5 seconds * 30 FPS) - adjust for desired clear interval
 detection_timeout = 5
-clear_interval = 10  # Frames to wait for complete list clear
+clear_interval = 10
 
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
 circle_positions = {}
-circle_history = {}  # Dictionary to store circle history (center, radius, last_seen)
+circle_history = {}
+cross_positions = {}
 
 print_interval = 5
 
 last_print_time = time.time()
-last_clear_time = time.time()  # Track time for list clear
+last_clear_time = time.time()
 
 while True:
     ret, frame = cap.read()
@@ -40,29 +42,35 @@ while True:
     circles = cv2.HoughCircles(thresh, cv2.HOUGH_GRADIENT, dp, min_distance,
                                param1=param1, param2=param2, minRadius=min_radius, maxRadius=max_radius)
 
-    frame_count = cap.get(cv2.CAP_PROP_POS_FRAMES)  # Get current frame number
+    frame_count = cap.get(cv2.CAP_PROP_POS_FRAMES)
 
-    # Check for new circles and update positions
     if circles is not None:
         circles = np.uint16(np.around(circles))
         for i in circles[0, :]:
             center = (i[0], i[1])
             radius = i[2]
             if radius > min_radius * 0.5:
-                # Check if center already exists in list or history
+                
                 if center in circle_positions:
-                    circle_positions[center] = radius  # Update existing circle
-                    circle_history[center]["last_seen"] = frame_count  # Update last seen frame
-                elif center in circle_history:
-                    # Circle reappeared after being missed, likely the same circle
                     circle_positions[center] = radius
-                    circle_history[center]["last_seen"] = frame_count  # Update last seen frame
+                    circle_history[center]["last_seen"] = frame_count
+                elif center in circle_history:
+                    circle_positions[center] = radius
+                    circle_history[center]["last_seen"] = frame_count
                 else:
-                    # New circle
                     circle_positions[center] = radius
                     circle_history[center] = {"radius": radius, "last_seen": frame_count}
 
-    # Update last_seen for existing entries and remove timed-out circles (unchanged)
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area > 50:  # Minimum area threshold for cross detection
+            approx = cv2.approxPolyDP(contour, 0.02 * cv2.arcLength(contour, True), True)
+            if len(approx) == 12:  # Cross has 12 vertices
+                center = tuple(map(int, np.mean(approx, axis=0)[0]))
+                cross_positions[center] = area
+                cv2.drawContours(frame, [approx], 0, (0, 255, 0), 2)
+
     for center, entry in list(circle_history.items()):
         entry["last_seen"] = frame_count
 
@@ -70,15 +78,13 @@ while True:
             del circle_positions[center]
             del circle_history[center]
 
-    # Draw detected circles (for troubleshooting) - comment out if not needed
     if circles is not None:
         circles = np.uint16(np.around(circles))
         for i in circles[0, :]:
             center = (i[0], i[1])
             radius = i[2]
-            cv2.circle(frame, center, radius, (0, 0, 255), 2)  # Draw detected circles in blue
+            cv2.circle(frame, center, radius, (0, 0, 255), 2)
 
-    # Draw and print circle information
     for center, radius in circle_positions.items():
         cv2.circle(frame, center, radius, (0, 255, 0), 2)
 
@@ -89,12 +95,18 @@ while True:
         print("Circle Positions:")
         for idx, (center, radius) in enumerate(circle_positions.items(), start=1):
             print(f"Circle {idx}: Center {center}, Radius {radius}")
+        print("")
+        print("Cross positions:")
+        for idx, (center) in enumerate(cross_positions.items(), start = 1):
+            print(f"Cross {idx}: Position {center}")
         last_print_time = current_time
 
     if current_time - last_clear_time >= clear_interval:
-        circle_positions.clear()  # Clear circle positions dictionary
-        circle_history.clear()    # Clear circle history dictionary
-        last_clear_time = current_time  # Update last clear time    
+        turn_360()
+        circle_positions.clear()
+        circle_history.clear()
+        cross_positions.clear()
+        last_clear_time = current_time   
 
     if cv2.waitKey(1) == ord('q'):
         break
