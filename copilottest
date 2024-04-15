@@ -1,0 +1,62 @@
+import cv2
+import numpy as np
+
+cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+
+while(cap.isOpened()):
+    ret, frame = cap.read()
+
+    # Convert the image to HSV color space
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # Define range for red color in HSV
+    lower_red = np.array([0, 120, 70])
+    upper_red = np.array([10, 255, 255])
+
+    # Threshold the HSV image to get only red colors
+    mask_red = cv2.inRange(hsv, lower_red, upper_red)
+
+    # Define range for white color in HSV
+    lower_white = np.array([0, 0, 212])
+    upper_white = np.array([131, 255, 255])
+
+    # Threshold the HSV image to get only white colors
+    mask_white = cv2.inRange(hsv, lower_white, upper_white)
+
+    # Bitwise-AND mask and original image
+    res_red = cv2.bitwise_and(frame, frame, mask=mask_red)
+    res_white = cv2.bitwise_and(frame, frame, mask=mask_white)
+
+    # Find contours in the mask
+    contours_red, _ = cv2.findContours(mask_red, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours_white, _ = cv2.findContours(mask_white, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Find circles in the mask
+    circles_red = cv2.HoughCircles(mask_red, cv2.HOUGH_GRADIENT, 1, 20, param1=50, param2=30, minRadius=0, maxRadius=0)
+    circles_white = cv2.HoughCircles(mask_white, cv2.HOUGH_GRADIENT, 1, 20, param1=50, param2=30, minRadius=0, maxRadius=0)
+
+    # Draw red contours and circles
+    for contour in contours_red:
+        cv2.drawContours(frame, [contour], -1, (0, 255, 0), 3)
+    if circles_red is not None:
+        for i in circles_red[0, :]:
+            center = (i[0], i[1])
+            radius = i[2]
+            cv2.circle(frame, center, radius, (0, 0, 255), 2)
+
+    # Draw white contours and circles
+    for contour in contours_white:
+        cv2.drawContours(frame, [contour], -1, (0, 255, 0), 3)
+    if circles_white is not None:
+        for i in circles_white[0, :]:
+            center = (i[0], i[1])
+            radius = i[2]
+            cv2.circle(frame, center, radius, (0, 0, 255), 2)
+
+    cv2.imshow('frame', frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
