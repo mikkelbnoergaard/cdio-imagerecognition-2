@@ -1,43 +1,62 @@
-# from pybricks.hubs import EV3Brick
-# from pybricks.ev3devices import Motor
-# from pybricks.parameters import Port
-# from pybricks.robotics import DriveBase
-# # Create your objects here
+#!/usr/bin/env pybricks-micropython
+from pybricks.hubs import EV3Brick
+from pybricks.ev3devices import (Motor, TouchSensor, ColorSensor,
+                                 InfraredSensor, UltrasonicSensor, GyroSensor)
+from pybricks.parameters import Port, Stop, Direction, Button, Color
+from pybricks.tools import wait, StopWatch, DataLog
+from pybricks.robotics import DriveBase
+from pybricks.media.ev3dev import SoundFile, ImageFile
 
-# # Initialize the EV3 Brick.
-# ev3 = EV3Brick()
+ev3 = EV3Brick()
 
-# # Initialize a motor at port B.
-# left_wheel = Motor(Port.B)
-# right_wheel = Motor(Port.A)
-# test_arm=Motor(Port.C)
-# robot = DriveBase(left_wheel,right_wheel, wheel_diameter= 55.5,axle_track=120)
+left_wheel = Motor(Port.B)
+right_wheel = Motor(Port.A)
+test_arm=Motor(Port.C)
+robot = DriveBase(left_wheel,right_wheel, wheel_diameter= 55.5,axle_track=120)
 
-# # Write your program here
+### Example Code
 
-# # Run the motor up to 500 degrees per second. To a target angle of 90 degrees.
-# #test_arm.run(-500)
-# #robot.straight(500)
+#### EV3 Brick (MicroPython)
+# This is a simplified example. Your implementation might differ.
+import socket
 
-# #left_wheel.run_target(800, -2000)æå++
-# #right_wheel.run_target(800, -2000)
+# Create a socket object
+serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-# def turn_360(robot, motor_speed):
-#   """
-#   This method turns the robot a full 360 degrees.
+# Get local machine name
+host = "0.0.0.0"
+port = 9999
 
-#   Args:
-#       robot (DriveBase): The DriveBase object representing the robot.
-#       motor_speed (int): The speed at which the motors should turn (degrees per second).
-#   """
-#   # A full circle is 360 degrees
-#   turn_angle = 360
+# Bind to the port
+serversocket.bind((host, port))
 
-#   # Use the DriveBase object's turn method for a controlled turn
-#   robot.turn(turn_angle, motor_speed)
+# Queue up to 5 requests
+serversocket.listen(5)
 
-# # Call the method in your program
+while True:
+    # Establish a connection
+    clientsocket,addr = serversocket.accept()
+    
+    # Receive the command
+    command = clientsocket.recv(1024).decode('utf-8')
+    
+    if command == 'FORWARD':
+        test_arm.run_target(1000, -10000000)
+        pass
+    elif command == 'BACKWARD':
+        # Code to move the robot backward
+        pass
 
-# test_arm.run_target(300, -10000)
+    clientsocket.close()
 
-# test_arm.run_target(800,10000)
+
+# This program requires LEGO EV3 MicroPython v2.0 or higher.
+# Click "Open user guide" on the EV3 extension tab for more information.
+
+
+# Create your objects here.
+
+
+
+# Write your program here.
+
