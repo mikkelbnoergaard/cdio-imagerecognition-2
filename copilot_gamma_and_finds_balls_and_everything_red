@@ -59,7 +59,7 @@ while True:
     # Filter out small or non-circular white contours
     for contour in contours_white:
         area = cv2.contourArea(contour)
-        if area > 30:
+        if area > 40:
             perimeter = cv2.arcLength(contour, True)
             circularity = 4 * np.pi * (area / (perimeter * perimeter))
             if 0.5 < circularity < 1.5:  # Less strict circularity check for balls
