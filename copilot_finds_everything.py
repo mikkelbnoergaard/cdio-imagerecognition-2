@@ -50,7 +50,7 @@ while True:
             circularity = 4 * np.pi * (area / (perimeter * perimeter))
             if 0.7 < circularity < 1.5:  # Less strict circularity check for balls
                 cv2.drawContours(frame, [contour], -1, (0, 255, 0), 3)  # Green color for balls
-            elif area > 500:  # Check for larger contours for boundaries
+            elif area > 100:  # Check for larger contours for boundaries
                 cv2.drawContours(frame, [contour], -1, (0, 0, 255), 3)  # Red color for boundaries
 
     # Show the frame
