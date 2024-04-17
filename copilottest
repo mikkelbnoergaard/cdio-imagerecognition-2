@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
 while(cap.isOpened()):
     ret, frame = cap.read()
@@ -47,9 +47,9 @@ while(cap.isOpened()):
     # Draw white contours and circles
     for contour in contours_white:
         cv2.drawContours(frame, [contour], -1, (0, 255, 0), 3)
-    if circles_white is not None:
-        for i in circles_white[0, :]:
-            center = (i[0], i[1])
+    if circles_red is not None:
+        for i in circles_red[0, :]:
+            center = (int(i[0]), int(i[1]))  # Convert to integers
             radius = i[2]
             cv2.circle(frame, center, radius, (0, 0, 255), 2)
 

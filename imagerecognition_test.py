@@ -15,7 +15,7 @@ blur_strength = 5
 detection_timeout = 5
 clear_interval = 10
 
-cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
 circle_positions = {}
 circle_history = {}
