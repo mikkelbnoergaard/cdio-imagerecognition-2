@@ -1,20 +1,40 @@
-#### Computer (Python)
 import socket
-
-# Create a socket object
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+import keyboard
+import time  # Import the time module
 
 # Get local machine name
-host = "169.254.55.224"
+host = "192.168.81.149"
 port = 9999
 
-# Connection to hostname on the port.
-s.connect((host, port))
+# Define the commands for each arrow key
+commands = {
+    'pil op': 'FORWARD',
+    'pil ned': 'BACKWARD',
+    'venstre pil': 'LEFT',
+    'højre pil': 'RIGHT',
+    'space': 'STOP',
+    'w': 'ARM_IN',
+    's': 'ARM_OUT'
+}
 
-# Send a command
-command = 'FORWARD'
-s.send(command.encode('utf-8'))
+# Send a command when an arrow key is pressed
+def send_command(key):
+    # Create a socket object
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # Connection to hostname on the port.
+    s.connect((host, port))
 
-# Close the connection
-s.close()
-### Tips
+    command = commands[key.name]
+    s.send(command.encode('utf-8'))
+
+    # Close the connection
+    s.close()
+
+    time.sleep(0.1)  # Add a small delay
+
+# Bind the arrow keys to the send_command function
+for key in commands.keys():
+    keyboard.on_press_key(key, send_command)
+
+# Block the script from exiting
+keyboard.wait()

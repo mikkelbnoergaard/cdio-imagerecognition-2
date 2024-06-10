@@ -1,0 +1,250 @@
+import cv2
+import numpy as np
+import time
+import socket
+import keyboard
+
+
+#############NETWORKING##############
+
+# Get local machine name
+host = "192.168.81.149"
+port = 9999
+
+# Define the commands for each arrow key
+commands = {
+    'pil op': 'FORWARD',
+    'pil ned': 'BACKWARD',
+    'venstre pil': 'LEFT',
+    'højre pil': 'RIGHT',
+    'space': 'STOP',
+    'w': 'ARM_IN',
+    's': 'ARM_OUT'
+}
+
+# Send a command when an arrow key is pressed
+def send_command(command):
+    # Create a socket object
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # Connection to hostname on the port.
+    s.connect((host, port))
+
+    command_to_send = commands[command]
+    s.send(command_to_send.encode('utf-8'))
+
+    # Close the connection
+    s.close()
+
+    time.sleep(0.1)  # Add a small delay
+
+#####################################
+
+
+# Function to adjust gamma
+def adjust_gamma(image, gamma=1.0):
+    invGamma = 1.0 / gamma
+    table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+    return cv2.LUT(image, table)
+
+# Open the video capture
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
+last_printed = time.time()
+angle = 0
+angle_difference = 0
+balls = []
+point_vertex = empty = np.array([[0, 0]])
+centroid = empty = np.array([[0, 0]])
+target = None
+
+
+while True:
+    # Read a frame
+    _, frame = cap.read()
+
+    # Convert the frame to HSV
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # Calculate the color distribution
+    color_dist = np.mean(hsv[:,:,1])
+
+    # Adjust gamma based on color distribution
+    if color_dist < 60:
+        frame = adjust_gamma(frame, 2)  # Increase gamma for low color images
+    elif color_dist > 190:
+        frame = adjust_gamma(frame, 0.5)  # Decrease gamma for high color images
+
+
+    ############RED EDGE DETECTION##############
+
+    # Define range for red color
+    lower_red = np.array([0, 100, 100])
+    upper_red = np.array([10, 255, 255])
+
+    # Threshold the HSV image to get only red colors
+    mask_red = cv2.inRange(hsv, lower_red, upper_red)
+
+    # Bitwise-AND mask and original image
+    res_red = cv2.bitwise_and(frame, frame, mask=mask_red)
+
+    # Find contours in the red mask
+    contours_red, _ = cv2.findContours(mask_red, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Draw all red contours
+    for contour in contours_red:
+        cv2.drawContours(frame, [contour], -1, (0, 0, 255), 3)  # Red color for contours
+
+    ############################################
+
+
+    ############GREEN TRIANGLE DETECTION##############
+
+    # Define range for green color
+    lower_green = np.array([30, 100, 100])
+    upper_green = np.array([90, 255, 255])
+
+    # Threshold the HSV image to get only green colors
+    mask_green = cv2.inRange(hsv, lower_green, upper_green)
+
+    # Find contours in the green mask
+    contours, _ = cv2.findContours(mask_green, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    for contour in contours:
+        # Approximate the shape
+        epsilon = 0.05 * cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, epsilon, True)
+
+
+        # If the shape has 3 points, it's a triangle
+        if len(approx) == 3:
+            # Draw the triangle on the screen
+            cv2.drawContours(frame, [approx], 0, (0, 255, 0), 2)
+
+            # Calculate the centroid of the triangle
+            centroid = np.mean(approx, axis=0)
+
+            # Find the vertex that is furthest from the centroid
+            distances = np.linalg.norm(approx - centroid, axis=-1)
+            point_vertex = approx[np.argmax(distances)]
+
+            # Calculate the angle between the line from the centroid to the "point" of the triangle and the vertical axis
+            dy = centroid[0][1] - point_vertex[0][1]  # Swap the order of subtraction to reverse the direction
+            dx = point_vertex[0][0] - centroid[0][0]
+            angle = np.arctan2(dy, dx) * 180.0 / np.pi
+
+            # Adjust the angle to be in the range of 0 to 360 degrees and go clockwise
+            angle = (angle + 360) % 360
+
+    # Display the resulting frame
+    cv2.imshow('Frame', frame)
+
+    ##################################################
+
+
+    ############DIRECTION CALCULATION##############
+
+    # Calculate the angle between the line from the centroid to the "point" of the triangle and the vertical axis
+    dy_triangle = centroid[0][1] - point_vertex[0][1]  # Swap the order of subtraction to reverse the direction
+    dx_triangle = point_vertex[0][0] - centroid[0][0]
+    angle_triangle = np.arctan2(dy_triangle, dx_triangle) * 180.0 / np.pi
+
+    # Adjust the angle to be in the range of 0 to 360 degrees and go clockwise
+    angle_triangle = (angle_triangle + 360) % 360
+
+    # Calculate the angle from the centroid of the triangle to each ball
+    angles_balls = []
+    for ball in balls:
+        dy_ball = centroid[0][1] - ball[1]
+        dx_ball = ball[0] - centroid[0][0]
+        angle_ball = np.arctan2(dy_ball, dx_ball) * 180.0 / np.pi
+        angle_ball = (angle_ball + 360) % 360
+        angles_balls.append(angle_ball)
+
+    # Find the ball that is farthest from the triangle
+    distances = [np.linalg.norm(np.array(ball) - centroid[0]) for ball in balls]
+    if distances:  # Check if the list is not empty
+        farthest_ball_index = np.argmin(distances)
+
+        target = balls[farthest_ball_index]
+
+        # Calculate the difference in angle
+        angle_difference = angle_triangle - angles_balls[farthest_ball_index]
+        angle_difference = (angle_difference + 360) % 360  # Adjust the difference to be in the range of 0 to 360 degrees
+
+
+    ###############################################
+
+
+    ############WHITE BALLS DETECTION##############
+
+    # Define range for white color
+    lower_white = np.array([0, 0, 212])
+    upper_white = np.array([130, 255, 255])
+
+    # Threshold the HSV image to get only white colors
+    mask_white = cv2.inRange(hsv, lower_white, upper_white)
+
+    # Bitwise-AND mask and original image
+    res_white = cv2.bitwise_and(frame, frame, mask=mask_white)
+
+    # Find contours in the white mask
+    contours_white, _ = cv2.findContours(mask_white, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    balls = []
+
+    # Filter out small or non-circular white contours
+    for contour in contours_white:
+        area = cv2.contourArea(contour)
+        if area > 40:
+            perimeter = cv2.arcLength(contour, True)
+            circularity = 3 * np.pi * (area / (perimeter * perimeter))
+            if 0.6 < circularity < 1.5:  # Less strict circularity check for balls
+                cv2.drawContours(frame, [contour], -1, (255, 0, 0), 3)  # White color for balls
+
+                # Calculate the centroid of the ball
+                center, _ = cv2.minEnclosingCircle(contour)
+                balls.append((round(center[0], 2), round(center[1], 2)))
+
+    # Show the frame
+    cv2.imshow('Frame', frame)
+
+    # Print every 1 second
+    if time.time() - last_printed >= 1:
+        print("Angle of Frank:" + str(round(angle, 2)))
+        print("Balls:")
+        for ball in balls:
+            print(ball)
+        print("Target ball:" + str(target))
+        print(angle_difference)
+        
+        
+        print("Length of point_vertex: " + str(len(point_vertex)))
+        print("Contents of point_vertex: " + str(point_vertex))
+
+        distance_to_target = ((target[0] - point_vertex[0])**2)**0.5
+        print("Distance to target: " + str(distance_to_target))
+        if ((distance_to_target <= 200).any() and (angle_difference <= 10 or angle_difference >= 350)):
+            send_command('pil ned')
+        else:
+            if 10 < angle_difference < 180:
+                send_command('højre pil')
+            elif 180 < angle_difference < 350:
+                send_command('venstre pil')
+            else:
+                send_command('pil op')
+
+
+        last_printed = time.time()
+
+    ##################################################
+
+    # Break the loop on 'q' key press
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Release the video capture and close all windows
+cap.release()
+cv2.destroyAllWindows()
+
+# Block the script from exiting
+keyboard.wait()

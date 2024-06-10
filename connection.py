@@ -1,3 +1,4 @@
+#!/usr/bin/env pybricks-micropython
 from pybricks.hubs import EV3Brick
 from pybricks.ev3devices import Motor
 from pybricks.parameters import Port
@@ -26,7 +27,7 @@ def turn_360(robot, motor_speed):
 # test_arm.run_target(800,10000)
 
 
-
+import time
 
 
 ### Example Code
@@ -54,12 +55,40 @@ while True:
     
     # Receive the command
     command = clientsocket.recv(1024).decode('utf-8')
+
+    test_arm.run(-300)
     
     if command == 'FORWARD':
-        test_arm.run_target(300, -10000)
-        pass
+        left_wheel.run(300)
+        right_wheel.run(300)
+        time.sleep(0.2)
+        left_wheel.stop()
+        right_wheel.stop()
     elif command == 'BACKWARD':
-        # Code to move the robot backward
-        pass
+        left_wheel.run(300)
+        right_wheel.run(300)
+        time.sleep(1)
+        left_wheel.stop()
+        right_wheel.stop()
+    elif command == 'LEFT':
+        left_wheel.run(-300)
+        time.sleep(0.2)
+        left_wheel.stop()
+    elif command == 'RIGHT':
+        right_wheel.run(-300)
+        time.sleep(0.2)
+        right_wheel.stop()
+    elif command == 'ARM_IN':
+        test_arm.run(-310)
+        time.sleep(1.25)
+        test_arm.stop()
+    elif command == 'ARM_OUT':
+        test_arm.run(1000)
+        time.sleep(5)
+        test_arm.stop()
+    elif command == 'STOP':
+        left_wheel.stop()  # Stop the left wheel
+        right_wheel.stop()  # Stop the right wheel
+        test_arm.stop()  # Stop the test arm
 
     clientsocket.close()

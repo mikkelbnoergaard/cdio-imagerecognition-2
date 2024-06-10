@@ -63,7 +63,7 @@ while True:
             perimeter = cv2.arcLength(contour, True)
             circularity = 4 * np.pi * (area / (perimeter * perimeter))
             if 0.5 < circularity < 1.5:  # Less strict circularity check for balls
-                cv2.drawContours(frame, [contour], -1, (255, 255, 255), 3)  # White color for balls
+                cv2.drawContours(frame, [contour], -1, (255, 0, 0), 3)  # White color for balls
 
     # Show the frame
     cv2.imshow('Frame', frame)
