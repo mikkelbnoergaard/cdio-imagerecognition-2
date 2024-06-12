@@ -67,7 +67,7 @@ while True:
     elif command == 'BACKWARD':
         left_wheel.run(300)
         right_wheel.run(300)
-        time.sleep(1)
+        time.sleep(0.7)
         left_wheel.stop()
         right_wheel.stop()
     elif command == 'LEFT':
@@ -84,7 +84,7 @@ while True:
         test_arm.stop()
     elif command == 'ARM_OUT':
         test_arm.run(1000)
-        time.sleep(5)
+        time.sleep(1)
         test_arm.stop()
     elif command == 'STOP':
         left_wheel.stop()  # Stop the left wheel

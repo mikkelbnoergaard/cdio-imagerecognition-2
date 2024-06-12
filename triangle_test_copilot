@@ -55,10 +55,19 @@ angle_difference = 0
 balls = []
 point_vertex = empty = np.array([[0, 0]])
 centroid = empty = np.array([[0, 0]])
-target = None
+target = [0.0, 0.0]
+target_locked = False
+right_center = 0
+dropoff = False
+mid_point = [0.0, 0.0]
+left_point = [0.0, 0.0]
+angle_triangle = 0.1
+closest_ball_index = 0
+drive_to_goal = False
 
 
 while True:
+
     # Read a frame
     _, frame = cap.read()
 
@@ -90,9 +99,27 @@ while True:
     # Find contours in the red mask
     contours_red, _ = cv2.findContours(mask_red, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
+    # Find the point with the lowest y-value among all points in all red contours
+    lowest_y_point = min((point for contour in contours_red for point in contour), key=lambda point: point[0][1])
+
+    # Find the point with the highest x-value among all points in all red contours
+    highest_x_point = max((point for contour in contours_red for point in contour), key=lambda point: point[0][0])
+
+    # Calculate the coordinates of the point between the lowest y-point and highest x-point
+    mid_point = ((lowest_y_point[0][0] + highest_x_point[0][0]) // 2, (lowest_y_point[0][1] + highest_x_point[0][1]) // 2)
+
+    # Calculate the coordinates of the new point to the left of the midpoint
+    left_point = (mid_point[0] - 150, mid_point[1])
+
     # Draw all red contours
     for contour in contours_red:
         cv2.drawContours(frame, [contour], -1, (0, 0, 255), 3)  # Red color for contours
+
+    # Mark the spot on the frame
+    cv2.circle(frame, mid_point, 5, (255, 255, 0), -1)  # Green color for the spot
+
+    # Mark the new spot on the frame
+    cv2.circle(frame, left_point, 5, (0, 255, 0), -1)  # Green color for the spot
 
     ############################################
 
@@ -100,8 +127,8 @@ while True:
     ############GREEN TRIANGLE DETECTION##############
 
     # Define range for green color
-    lower_green = np.array([30, 100, 100])
-    upper_green = np.array([90, 255, 255])
+    lower_green = np.array([30, 80, 80])
+    upper_green = np.array([100, 255, 255])
 
     # Threshold the HSV image to get only green colors
     mask_green = cv2.inRange(hsv, lower_green, upper_green)
@@ -123,9 +150,21 @@ while True:
             # Calculate the centroid of the triangle
             centroid = np.mean(approx, axis=0)
 
-            # Find the vertex that is furthest from the centroid
-            distances = np.linalg.norm(approx - centroid, axis=-1)
-            point_vertex = approx[np.argmax(distances)]
+            # Find the ball that is farthest from the triangle
+            distances = [np.linalg.norm(np.array(ball) - centroid[0]) for ball in balls]
+            if distances:  # Check if the list is not empty
+                closest_ball_index = np.argmin(distances)
+
+                # Calculate the difference in angle
+                if target is not None:  # If a target is set
+                    target_angle = np.arctan2(target[1] - centroid[0][1], target[0] - centroid[0][0]) * 180.0 / np.pi
+                    angle_difference = angle_triangle - target_angle
+
+            # Calculate the distances from the centroid to each vertex
+            vertex_distances = [np.linalg.norm(vertex - centroid[0]) for vertex in approx]
+
+            # Find the vertex that is farthest from the centroid
+            point_vertex = approx[np.argmax(vertex_distances)]
 
             # Calculate the angle between the line from the centroid to the "point" of the triangle and the vertical axis
             dy = centroid[0][1] - point_vertex[0][1]  # Swap the order of subtraction to reverse the direction
@@ -134,6 +173,13 @@ while True:
 
             # Adjust the angle to be in the range of 0 to 360 degrees and go clockwise
             angle = (angle + 360) % 360
+
+            # Convert target to a tuple of integers
+            target_tuple = (int(target[0]), int(target[1]))
+
+            # Draw the target as a yellow circle on the image
+            cv2.circle(frame, target_tuple, radius=10, color=(0, 255, 255), thickness=-1)
+
 
     # Display the resulting frame
     cv2.imshow('Frame', frame)
@@ -151,25 +197,21 @@ while True:
     # Adjust the angle to be in the range of 0 to 360 degrees and go clockwise
     angle_triangle = (angle_triangle + 360) % 360
 
-    # Calculate the angle from the centroid of the triangle to each ball
-    angles_balls = []
-    for ball in balls:
-        dy_ball = centroid[0][1] - ball[1]
-        dx_ball = ball[0] - centroid[0][0]
-        angle_ball = np.arctan2(dy_ball, dx_ball) * 180.0 / np.pi
-        angle_ball = (angle_ball + 360) % 360
-        angles_balls.append(angle_ball)
+
+    # Calculate the angle from the centroid of the triangle to the target
+    dy_target = centroid[0][1] - target[1]
+    dx_target = target[0] - centroid[0][0]
+    angle_target = np.arctan2(dy_target, dx_target) * 180.0 / np.pi
+    angle_target = (angle_target + 360) % 360
 
     # Find the ball that is farthest from the triangle
     distances = [np.linalg.norm(np.array(ball) - centroid[0]) for ball in balls]
     if distances:  # Check if the list is not empty
-        farthest_ball_index = np.argmin(distances)
+        closest_ball_index = np.argmin(distances)
 
-        target = balls[farthest_ball_index]
-
-        # Calculate the difference in angle
-        angle_difference = angle_triangle - angles_balls[farthest_ball_index]
-        angle_difference = (angle_difference + 360) % 360  # Adjust the difference to be in the range of 0 to 360 degrees
+    # Calculate the difference in angle
+    angle_difference = angle_triangle - angle_target
+    angle_difference = (angle_difference + 360) % 360  # Adjust the difference to be in the range of 0 to 360 degrees
 
 
     ###############################################
@@ -179,7 +221,7 @@ while True:
 
     # Define range for white color
     lower_white = np.array([0, 0, 212])
-    upper_white = np.array([130, 255, 255])
+    upper_white = np.array([140, 255, 255])
 
     # Threshold the HSV image to get only white colors
     mask_white = cv2.inRange(hsv, lower_white, upper_white)
@@ -195,10 +237,10 @@ while True:
     # Filter out small or non-circular white contours
     for contour in contours_white:
         area = cv2.contourArea(contour)
-        if area > 40:
+        if area > 30 and area < 100:
             perimeter = cv2.arcLength(contour, True)
             circularity = 3 * np.pi * (area / (perimeter * perimeter))
-            if 0.6 < circularity < 1.5:  # Less strict circularity check for balls
+            if 0.4 < circularity < 1.5:  # Less strict circularity check for balls
                 cv2.drawContours(frame, [contour], -1, (255, 0, 0), 3)  # White color for balls
 
                 # Calculate the centroid of the ball
@@ -208,22 +250,51 @@ while True:
     # Show the frame
     cv2.imshow('Frame', frame)
 
+    if target[0] == 0.0 and target[1] == 0.0:
+        if balls:
+            target = balls[closest_ball_index]
+
+    if not dropoff and closest_ball_index is not None and closest_ball_index < len(balls):
+        if closest_ball_index > 0:
+            target = balls[closest_ball_index]
+    elif dropoff:
+        if not drive_to_goal:
+            target = left_point
+            distance_to_target = ((target[0] - point_vertex[0])**2)**0.5
+
     # Print every 1 second
     if time.time() - last_printed >= 1:
+        
+    # Print the coordinates
+        print("########################")
+        print(dropoff)
+        print("Drive to goal:")
+        print(drive_to_goal)
+
         print("Angle of Frank:" + str(round(angle, 2)))
         print("Balls:")
         for ball in balls:
             print(ball)
         print("Target ball:" + str(target))
         print(angle_difference)
-        
-        
-        print("Length of point_vertex: " + str(len(point_vertex)))
-        print("Contents of point_vertex: " + str(point_vertex))
 
         distance_to_target = ((target[0] - point_vertex[0])**2)**0.5
         print("Distance to target: " + str(distance_to_target))
-        if ((distance_to_target <= 200).any() and (angle_difference <= 10 or angle_difference >= 350)):
+            
+        if dropoff:
+            if (distance_to_target <= 10).any():
+                target = mid_point
+                distance_to_target = ((target[0] - point_vertex[0])**2)**0.5
+                drive_to_goal = True
+                dropoff = False
+        
+        if drive_to_goal and (distance_to_target <= 30).any():
+            print("SUIIIII")
+            send_command('space')
+            send_command('s')
+            send_command('space')
+
+        if ((distance_to_target >= 100).any() and (angle_difference <= 10 or angle_difference >= 350)):
             send_command('pil ned')
         else:
             if 10 < angle_difference < 180:
@@ -235,6 +306,14 @@ while True:
 
 
         last_printed = time.time()
+    
+    if not balls:
+        if not drive_to_goal:
+            dropoff = True
+    elif balls:
+        dropoff = False
+        if balls:
+            target = balls[closest_ball_index]
 
     ##################################################
 
