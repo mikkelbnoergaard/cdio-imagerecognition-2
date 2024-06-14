@@ -64,6 +64,8 @@ left_point = [0.0, 0.0]
 angle_triangle = 0.1
 closest_ball_index = 0
 drive_to_goal = False
+distance_to_target = 0
+finished = False
 
 
 while True:
@@ -99,17 +101,24 @@ while True:
     # Find contours in the red mask
     contours_red, _ = cv2.findContours(mask_red, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Find the point with the lowest y-value among all points in all red contours
-    lowest_y_point = min((point for contour in contours_red for point in contour), key=lambda point: point[0][1])
-
+    try:
+        lowest_y_point = min((point for contour in contours_red for point in contour), key=lambda point: point[0][1])
+    except ValueError:
+        print("No points in contours_red")
+        lowest_y_point = [(0.0, 0.0)]  # or some default value
     # Find the point with the highest x-value among all points in all red contours
-    highest_x_point = max((point for contour in contours_red for point in contour), key=lambda point: point[0][0])
+
+    try:
+        highest_x_point = max((point for contour in contours_red for point in contour), key=lambda point: point[0][0])
+    except ValueError:
+        print("No points in contours_red")
+        highest_x_point = [(0.0, 0.0)]  # or some default value
 
     # Calculate the coordinates of the point between the lowest y-point and highest x-point
     mid_point = ((lowest_y_point[0][0] + highest_x_point[0][0]) // 2, (lowest_y_point[0][1] + highest_x_point[0][1]) // 2)
 
     # Calculate the coordinates of the new point to the left of the midpoint
-    left_point = (mid_point[0] - 150, mid_point[1])
+    left_point = (mid_point[0] - 120, mid_point[1])
 
     # Draw all red contours
     for contour in contours_red:
@@ -240,7 +249,7 @@ while True:
         if area > 30 and area < 100:
             perimeter = cv2.arcLength(contour, True)
             circularity = 3 * np.pi * (area / (perimeter * perimeter))
-            if 0.4 < circularity < 1.5:  # Less strict circularity check for balls
+            if 0.3 < circularity < 1.5:  # Less strict circularity check for balls
                 cv2.drawContours(frame, [contour], -1, (255, 0, 0), 3)  # White color for balls
 
                 # Calculate the centroid of the ball
@@ -249,18 +258,6 @@ while True:
 
     # Show the frame
     cv2.imshow('Frame', frame)
-
-    if target[0] == 0.0 and target[1] == 0.0:
-        if balls:
-            target = balls[closest_ball_index]
-
-    if not dropoff and closest_ball_index is not None and closest_ball_index < len(balls):
-        if closest_ball_index > 0:
-            target = balls[closest_ball_index]
-    elif dropoff:
-        if not drive_to_goal:
-            target = left_point
-            distance_to_target = ((target[0] - point_vertex[0])**2)**0.5
 
     # Print every 1 second
     if time.time() - last_printed >= 1:
@@ -280,27 +277,44 @@ while True:
 
         distance_to_target = ((target[0] - point_vertex[0])**2)**0.5
         print("Distance to target: " + str(distance_to_target))
+
+        if target[0] == 0.0 and target[1] == 0.0:
+            if balls:
+                target = balls[closest_ball_index]
+            else:
+                target = left_point
+
+        if not dropoff and closest_ball_index is not None and closest_ball_index < len(balls):
+            if (distance_to_target <= 20).any():
+                target = balls[closest_ball_index]
+        elif dropoff:
+            if not drive_to_goal:
+                if (distance_to_target <= 20).any():
+                    target = left_point
+                    distance_to_target = ((target[0] - point_vertex[0])**2)**0.5
             
         if dropoff:
-            if (distance_to_target <= 10).any():
+            if (distance_to_target <= 20).any():
                 target = mid_point
                 distance_to_target = ((target[0] - point_vertex[0])**2)**0.5
                 drive_to_goal = True
                 dropoff = False
         
-        if drive_to_goal and (distance_to_target <= 30).any():
+        if drive_to_goal and (distance_to_target <= 20).any():
+            finished = True
             print("SUIIIII")
             send_command('space')
             send_command('s')
-            send_command('space')
 
-        if ((distance_to_target >= 100).any() and (angle_difference <= 10 or angle_difference >= 350)):
+        if ((distance_to_target >= 100).any() and (angle_difference <= 10 or angle_difference >= 350) and not finished):
             send_command('pil ned')
         else:
             if 10 < angle_difference < 180:
                 send_command('højre pil')
             elif 180 < angle_difference < 350:
                 send_command('venstre pil')
+            elif (distance_to_target < 40).any() and (angle_difference <= 10 or angle_difference >= 350):
+                send_command('pil ned')
             else:
                 send_command('pil op')
 
@@ -312,8 +326,7 @@ while True:
             dropoff = True
     elif balls:
         dropoff = False
-        if balls:
-            target = balls[closest_ball_index]
+        drive_to_goal = False
 
     ##################################################
 

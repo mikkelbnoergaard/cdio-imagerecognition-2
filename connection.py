@@ -71,20 +71,24 @@ while True:
         left_wheel.stop()
         right_wheel.stop()
     elif command == 'LEFT':
-        left_wheel.run(-300)
+        left_wheel.run(-200)
+        right_wheel.run(200)
         time.sleep(0.2)
         left_wheel.stop()
+        right_wheel.stop()
     elif command == 'RIGHT':
-        right_wheel.run(-300)
+        right_wheel.run(-200)
+        left_wheel.run(200)
         time.sleep(0.2)
         right_wheel.stop()
+        left_wheel.stop()
     elif command == 'ARM_IN':
         test_arm.run(-310)
         time.sleep(1.25)
         test_arm.stop()
     elif command == 'ARM_OUT':
-        test_arm.run(1000)
-        time.sleep(1)
+        test_arm.run(2000)
+        time.sleep(10)
         test_arm.stop()
     elif command == 'STOP':
         left_wheel.stop()  # Stop the left wheel
