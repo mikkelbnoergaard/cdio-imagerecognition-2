@@ -66,7 +66,11 @@ closest_ball_index = 0
 drive_to_goal = False
 distance_to_target = 0
 finished = False
-
+angle_difference_to_red = 0
+closest_red_contour = None
+min_distance = 100
+distance = 0
+closest_point = None
 
 while True:
 
@@ -195,6 +199,79 @@ while True:
 
     ##################################################
 
+    ############BLUE RECTANGLE DETECTION##############
+
+    # Define range for blue color
+    lower_blue = np.array([110, 50, 50])
+    upper_blue = np.array([130, 255, 255])
+
+    # Threshold the HSV image to get only blue colors
+    mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
+
+    # Bitwise-AND mask and original image
+    res_blue = cv2.bitwise_and(frame, frame, mask=mask_blue)
+
+    # Dilate the mask to merge nearby contours
+    kernel = np.ones((50,50),np.uint8)  # Adjust the kernel size as needed
+    dilated_mask_blue = cv2.dilate(mask_blue, kernel, iterations = 1)
+
+    # Find contours in the dilated mask
+    contours_blue, _ = cv2.findContours(dilated_mask_blue, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Filter out small contours based on area
+    contours_blue = [cnt for cnt in contours_blue if cv2.contourArea(cnt) > 100]
+
+    try:
+        # Combine all contours into one
+        all_contours = np.concatenate(contours_blue)
+    
+        # Get the minimum area rectangle that encloses the contours
+        rect = cv2.minAreaRect(all_contours)
+    
+        # Reduce the size of the rectangle to 2/3 of its current size
+        center, size, angle = rect
+        size = (size[0]*2/3, size[1]*2/3)
+        rect = (center, size, angle)
+    
+        # Get the box points and draw the rectangle
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+        cv2.drawContours(frame, [box], 0, (0, 255, 0), 2)
+    
+        # Calculate the center of the rectangle
+        center_x = int((box[0][0] + box[2][0]) / 2)
+        center_y = int((box[0][1] + box[2][1]) / 2)
+    
+        # Convert point_vertex to a tuple of two elements
+        point_vertex_tuple = (point_vertex[0][0], point_vertex[0][1])
+    
+    except ValueError:
+        print("No blue contours found")
+    
+    ##########DISTANCE TO RED CALCULATION##########
+
+    # Initialize variables
+    closest_red_contour = None
+    closest_point = None
+    min_distance = float('inf')
+
+    # Calculate the distance from the blue triangle to each point on each red contour
+    for contour in contours_red:
+        for point in contour:
+            point = point[0]  # contour points are nested in an extra list
+            distance = np.sqrt((center_x - point[0])**2 + (center_y - point[1])**2)
+
+            # Update the closest red contour, minimum distance, and closest point
+            if distance < min_distance:
+                closest_red_contour = contour
+                min_distance = distance
+                closest_point = point
+
+    if closest_point is not None and closest_red_contour is not None:
+        # Draw a line from the center of the blue rectangle to the closest point on the red contour
+        cv2.line(frame, (center_x, center_y), tuple(closest_point), (0, 255, 0), 2)
+
+    ###############################################
 
     ############DIRECTION CALCULATION##############
 
@@ -222,8 +299,9 @@ while True:
     angle_difference = angle_triangle - angle_target
     angle_difference = (angle_difference + 360) % 360  # Adjust the difference to be in the range of 0 to 360 degrees
 
-
     ###############################################
+
+
 
 
     ############WHITE BALLS DETECTION##############
@@ -299,6 +377,19 @@ while True:
                 distance_to_target = ((target[0] - point_vertex[0])**2)**0.5
                 drive_to_goal = True
                 dropoff = False
+
+        # If the blue triangle is within a given length of a red contour
+        if closest_red_contour is not None and distance <= 100:
+            # Calculate the angle of the red contour
+            rect = cv2.minAreaRect(closest_red_contour)
+            _, _, angle_red = rect
+
+            # Calculate the difference in angle
+            angle_difference_to_red = angle - angle_red
+            print("CLOSE TO THE EDGE!")
+        
+        print("Angle difference to red: " + str(angle_difference_to_red))
+        print("Distance to red: " + str(distance))
         
         if drive_to_goal and (distance_to_target <= 20).any():
             finished = True
