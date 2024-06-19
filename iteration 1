@@ -75,7 +75,7 @@ distance = 0
 closest_point = None
 
 start_time = time.time()
-timer_duration = 6*60 # 8 minutes
+timer_duration = 0.5*60 # 6 minutes
 
 # Step 3: Display the timer on the image
 # Assuming 'frame' is your image
@@ -400,7 +400,7 @@ while True:
                 distances = [cv2.pointPolygonTest(red_contour, center, True) for red_contour in contours_red]
 
                 # Only add the ball to the list if it's farther than 20 from all red contours
-                if all(abs(distance) > 40 for distance in distances):
+                if all(abs(distance) > 45 for distance in distances):
                     balls.append((round(center[0], 2), round(center[1], 2)))
 
     ###############################################
@@ -430,7 +430,8 @@ while True:
     # Print every 1 second
     if time.time() - last_printed >= 0.3:
         
-        if remaining_time <= 0 or cv2.waitKey(1) & 0xFF == ord('q'):
+        if remaining_time <= 0 and not drive_to_goal and not finished:
+            target = left_point
             dropoff = True
     
         if finished:
