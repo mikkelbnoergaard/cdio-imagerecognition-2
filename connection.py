@@ -59,7 +59,7 @@ while True:
     command = clientsocket.recv(1024).decode('utf-8')
 
     if eatBalls:
-        test_arm.run(-1000)
+        test_arm.run(-700)
     
     if command == 'FORWARD':
         left_wheel.run(200)
@@ -97,7 +97,7 @@ while True:
         test_arm.stop()
         time.sleep(0.5)
         eatBalls = False
-        test_arm.run(5000)
+        test_arm.run(2000)
     elif command == 'STOP':
         left_wheel.stop()  # Stop the left wheel
         right_wheel.stop()  # Stop the right wheel
