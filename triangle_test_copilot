@@ -24,18 +24,33 @@ commands = {
     'navigate right': 'NAVIGATE_RIGHT'
 }
 
-# Send a command when an arrow key is pressed
-def send_command(command):
-    # Create a socket object
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # Connection to hostname on the port.
-    s.connect((host, port))
+# Modified send_command function with retry logic
+def send_command(command, max_retries=5, retry_delay=2):
+    attempt = 0
+    while attempt < max_retries:
+        try:
+            # Create a socket object
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # Connection to hostname on the port.
+            s.connect((host, port))
 
-    command_to_send = commands[command]
-    s.send(command_to_send.encode('utf-8'))
+            command_to_send = commands[command]
+            s.send(command_to_send.encode('utf-8'))
 
-    # Close the connection
-    s.close()
+            # Close the connection
+            s.close()
+
+            print(f"Command '{command}' sent successfully.")
+            break  # Exit the loop if the command was sent successfully
+        except Exception as e:
+            print(f"Failed to send command '{command}': {e}")
+            attempt += 1
+            print(f"Retrying... Attempt {attempt} of {max_retries}")
+            time.sleep(retry_delay)  # Wait before retrying
+    else:
+        # This block executes if the loop completes all iterations without breaking
+        print(f"Failed to send command '{command}' after {max_retries} attempts.")
+
 
     time.sleep(0.1)  # Add a small delay
 
@@ -105,12 +120,19 @@ while True:
 
     ############RED EDGE DETECTION##############
 
-    # Define range for red color
-    lower_red = np.array([0, 120, 120])
-    upper_red = np.array([8, 255, 255])
+    # Adjusted range for red color to cover both ends of the hue spectrum
+    lower_red1 = np.array([0, 100, 100])
+    upper_red1 = np.array([10, 255, 255])
 
-    # Threshold the HSV image to get only red colors
-    mask_red = cv2.inRange(hsv, lower_red, upper_red)
+    lower_red2 = np.array([160, 100, 100])
+    upper_red2 = np.array([180, 255, 255])
+
+    # Threshold the HSV image to get only red colors (for both ranges)
+    mask_red1 = cv2.inRange(hsv, lower_red1, upper_red1)
+    mask_red2 = cv2.inRange(hsv, lower_red2, upper_red2)
+
+    # Combine masks for full red range
+    mask_red = cv2.bitwise_or(mask_red1, mask_red2)
 
     # Bitwise-AND mask and original image
     res_red = cv2.bitwise_and(frame, frame, mask=mask_red)
@@ -456,6 +478,7 @@ while True:
         if target[0] == 0.0 and target[1] == 0.0:
             if balls:
                 target = balls[closest_ball_index]
+                dropoff = False
             else:
                 target = left_point
                 dropoff = True

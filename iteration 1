@@ -6,12 +6,10 @@ import keyboard
 
 
 #############NETWORKING##############
-
-# Get local machine name
 host = "192.168.86.149"
 port = 9999
 
-# Define the commands for each arrow key
+#Define commands
 commands = {
     'pil op': 'FORWARD',
     'pil ned': 'BACKWARD',
@@ -24,23 +22,31 @@ commands = {
     'navigate right': 'NAVIGATE_RIGHT'
 }
 
-# Send a command when an arrow key is pressed
-def send_command(command):
-    # Create a socket object
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # Connection to hostname on the port.
-    s.connect((host, port))
+#Function for sending commands to robot
+def send_command(command, max_retries=5, retry_delay=2):
+    attempt = 0
+    while attempt < max_retries:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((host, port))
 
-    command_to_send = commands[command]
-    s.send(command_to_send.encode('utf-8'))
+            command_to_send = commands[command]
+            s.send(command_to_send.encode('utf-8'))
 
-    # Close the connection
-    s.close()
+            s.close()
+
+            print(f"Command '{command}' sent successfully.")
+            break  # Exit the loop if the command was sent successfully
+        except Exception as e:
+            print(f"Failed to send command '{command}': {e}")
+            attempt += 1
+            print(f"Retrying... Attempt {attempt} of {max_retries}")
+            time.sleep(retry_delay)  # Wait before retrying
+    else:
+        print(f"Failed to send command '{command}' after {max_retries} attempts.")
 
     time.sleep(0.1)  # Add a small delay
-
 #####################################
-
 
 # Function to adjust gamma
 def adjust_gamma(image, gamma=1.0):
@@ -75,28 +81,23 @@ distance = 0
 closest_point = None
 
 start_time = time.time()
-timer_duration = 6*60 # 6 minutes
+timer_duration = 6*60 # 6 minutes timer, after which the robot should drive to the finish
 
-# Step 3: Display the timer on the image
-# Assuming 'frame' is your image
+# Define the font and text properties for timer
 font = cv2.FONT_HERSHEY_SIMPLEX
-position = (10, 50)  # Position of the text on the image (top-left corner)
+position = (10, 50)
 font_scale = 1
-font_color = (255, 0, 0)  # Blue color in BGR
+font_color = (255, 0, 0)
 line_type = 2
 
 while True:
 
-    # Read a frame
     _, frame = cap.read()
 
-    # Convert the frame to HSV
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-    # Calculate the color distribution
     color_dist = np.mean(hsv[:,:,1])
 
-    # Adjust gamma based on color distribution
     if color_dist < 60:
         frame = adjust_gamma(frame, 2)  # Increase gamma for low color images
     elif color_dist > 190:
@@ -104,15 +105,17 @@ while True:
 
 
     ############RED EDGE DETECTION##############
+    lower_red1 = np.array([0, 100, 100])
+    upper_red1 = np.array([10, 255, 255])
 
-    # Define range for red color
-    lower_red = np.array([0, 120, 120])
-    upper_red = np.array([8, 255, 255])
+    lower_red2 = np.array([160, 100, 100])
+    upper_red2 = np.array([180, 255, 255])
 
-    # Threshold the HSV image to get only red colors
-    mask_red = cv2.inRange(hsv, lower_red, upper_red)
+    mask_red1 = cv2.inRange(hsv, lower_red1, upper_red1)
+    mask_red2 = cv2.inRange(hsv, lower_red2, upper_red2)
 
-    # Bitwise-AND mask and original image
+    mask_red = cv2.bitwise_or(mask_red1, mask_red2)
+
     res_red = cv2.bitwise_and(frame, frame, mask=mask_red)
 
     # Find contours in the red mask
@@ -122,26 +125,24 @@ while True:
         lowest_y_point = min((point for contour in contours_red for point in contour), key=lambda point: point[0][1])
     except ValueError:
         print("No points in contours_red")
-        lowest_y_point = [(0.0, 0.0)]  # or some default value
-    # Find the point with the highest x-value among all points in all red contours
+        lowest_y_point = [(0.0, 0.0)]
 
     try:
         highest_x_point = max((point for contour in contours_red for point in contour), key=lambda point: point[0][0])
     except ValueError:
         print("No points in contours_red")
-        highest_x_point = [(0.0, 0.0)]  # or some default value
+        highest_x_point = [(0.0, 0.0)]
 
-    # Calculate the coordinates of the point between the lowest y-point and highest x-point
+    # Calculate the middle of the goal
     mid_point = ((lowest_y_point[0][0] + highest_x_point[0][0]) // 2, (lowest_y_point[0][1] + highest_x_point[0][1]) // 2)
 
-    # Calculate the coordinates of the new point to the left of the midpoint
+    # Calculate new point to the left of the goal
     left_point = (mid_point[0] - 120, mid_point[1])
 
-    # Assuming 'frame' is your image and 'contours_red' contains all the red contours
     height, width, _ = frame.shape
 
-    # Define the center region (adjust the size as needed)
-    center_region_width, center_region_height = width // 4, height // 4  # Adjust the divisor to change the region size
+    # Define the center region to make a square around the cross
+    center_region_width, center_region_height = width // 4, height // 4
     center_x, center_y = width // 2, height // 2
     top_left = (center_x - center_region_width // 2, center_y - center_region_height // 2)
     bottom_right = (center_x + center_region_width // 2, center_y + center_region_height // 2)
@@ -153,7 +154,7 @@ while True:
             x, y = point[0]
             if top_left[0] < x < bottom_right[0] and top_left[1] < y < bottom_right[1]:
                 filtered_contours.append(contour)
-                break  # Break after adding the contour to avoid duplicates
+                break
 
     # Find the bounding rectangle for the filtered contours
     if filtered_contours:
@@ -180,50 +181,40 @@ while True:
 
     # Draw all red contours
     for contour in contours_red:
-        cv2.drawContours(frame, [contour], -1, (0, 0, 255), 3)  # Red color for contours
+        cv2.drawContours(frame, [contour], -1, (0, 0, 255), 3)
 
-    # Mark the spot on the frame
-    cv2.circle(frame, mid_point, 5, (255, 255, 0), -1)  # Green color for the spot
+    # Mark the goal
+    cv2.circle(frame, mid_point, 5, (255, 255, 0), -1)
 
-    # Mark the new spot on the frame
-    cv2.circle(frame, left_point, 5, (0, 255, 0), -1)  # Green color for the spot
-
+    # Mark the point to the left of the goal
+    cv2.circle(frame, left_point, 5, (0, 255, 0), -1)
     ############################################
 
-
     ############GREEN TRIANGLE DETECTION##############
-
-    # Define range for green color
     lower_green = np.array([30, 80, 80])
     upper_green = np.array([100, 255, 255])
 
-    # Threshold the HSV image to get only green colors
     mask_green = cv2.inRange(hsv, lower_green, upper_green)
 
-    # Find contours in the green mask
     contours, _ = cv2.findContours(mask_green, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     for contour in contours:
-        # Approximate the shape
         epsilon = 0.05 * cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, epsilon, True)
 
-
-        # If the shape has 3 points, it's a triangle
         if len(approx) == 3:
             # Draw the triangle on the screen
             cv2.drawContours(frame, [approx], 0, (0, 255, 0), 2)
 
-            # Calculate the centroid of the triangle
             centroid = np.mean(approx, axis=0)
 
             # Find the ball that is farthest from the triangle
             distances = [np.linalg.norm(np.array(ball) - centroid[0]) for ball in balls]
-            if distances:  # Check if the list is not empty
+            if distances:
                 closest_ball_index = np.argmin(distances)
 
                 # Calculate the difference in angle
-                if target is not None:  # If a target is set
+                if target is not None:
                     target_angle = np.arctan2(target[1] - centroid[0][1], target[0] - centroid[0][0]) * 180.0 / np.pi
                     angle_difference = angle_triangle - target_angle
 
@@ -234,95 +225,37 @@ while True:
             point_vertex = approx[np.argmax(vertex_distances)]
 
             # Calculate the angle between the line from the centroid to the "point" of the triangle and the vertical axis
-            dy = centroid[0][1] - point_vertex[0][1]  # Swap the order of subtraction to reverse the direction
+            dy = centroid[0][1] - point_vertex[0][1]
             dx = point_vertex[0][0] - centroid[0][0]
             angle = np.arctan2(dy, dx) * 180.0 / np.pi
 
             # Adjust the angle to be in the range of 0 to 360 degrees and go clockwise
             angle = (angle + 360) % 360
 
-            # Convert target to a tuple of integers
             target_tuple = (int(target[0]), int(target[1]))
 
-            # Draw the target as a yellow circle on the image
             cv2.circle(frame, target_tuple, radius=10, color=(0, 255, 255), thickness=-1)
 
-
-    # Display the resulting frame
     cv2.imshow('Frame', frame)
-
     ##################################################
-
-    ############BLUE RECTANGLE DETECTION##############
-
-    # # Define range for blue color
-    # lower_blue = np.array([120, 50, 50])
-    # upper_blue = np.array([130, 255, 255])
-
-    # # Threshold the HSV image to get only blue colors
-    # mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
-
-    # # Bitwise-AND mask and original image
-    # res_blue = cv2.bitwise_and(frame, frame, mask=mask_blue)
-
-    # # Dilate the mask to merge nearby contours
-    # kernel = np.ones((50,50),np.uint8)  # Adjust the kernel size as needed
-    # dilated_mask_blue = cv2.dilate(mask_blue, kernel, iterations = 1)
-
-    # # Find contours in the dilated mask
-    # contours_blue, _ = cv2.findContours(dilated_mask_blue, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # # Filter out small contours based on area
-    # contours_blue = [cnt for cnt in contours_blue if cv2.contourArea(cnt) > 100]
-
-    # try:
-    #     # Combine all contours into one
-    #     all_contours = np.concatenate(contours_blue)
     
-    #     # Get the minimum area rectangle that encloses the contours
-    #     rect = cv2.minAreaRect(all_contours)
-    
-    #     # Reduce the size of the rectangle to 2/3 of its current size
-    #     center, size, angle = rect
-    #     size = (size[0]*2/3, size[1]*2/3)
-    #     rect = (center, size, angle)
-    
-    #     # Get the box points and draw the rectangle
-    #     box = cv2.boxPoints(rect)
-    #     box = np.int0(box)
-    #     cv2.drawContours(frame, [box], 0, (0, 255, 0), 2)
-    
-    #     # Calculate the center of the rectangle
-    #     center_x = int((box[0][0] + box[2][0]) / 2)
-    #     center_y = int((box[0][1] + box[2][1]) / 2)
-    
-    #     # Convert point_vertex to a tuple of two elements
-    #     point_vertex_tuple = (point_vertex[0][0], point_vertex[0][1])
-    
-    # except ValueError:
-    #     print("No blue contours found")
-    
-    ##########DISTANCE TO RED CALCULATION##########
-
-    # Initialize variables
+    ##########DISTANCE TO RED CALCULATION#############
     closest_red_contour = None
     closest_point = None
     min_distance = float('inf')
 
     distance_behind = -55
 
-    # Calculate the coordinates of the point behind the triangle
-    # The angle is subtracted from 180 to reverse the direction
+    # Calculate the coordinates of the point behind the triangle (center of our robot)
     behind_x = int(point_vertex[0][0] - distance_behind * np.cos(np.radians(180 - angle)))
     behind_y = int(point_vertex[0][1] - distance_behind * np.sin(np.radians(180 - angle)))
 
     # Calculate the distance from the point behind the triangle to each point on each red contour
     for contour in contours_red:
         for point in contour:
-            point = point[0]  # contour points are nested in an extra list
+            point = point[0]
             distance = np.sqrt((behind_x - point[0])**2 + (behind_y - point[1])**2)
 
-            # Update the closest red contour, minimum distance, and closest point
             if distance < min_distance:
                 closest_red_contour = contour
                 min_distance = distance
@@ -331,21 +264,16 @@ while True:
     if closest_point is not None and closest_red_contour is not None:
         # Draw a line from the point behind the triangle to the closest point on the red contour
         cv2.line(frame, (behind_x, behind_y), tuple(closest_point), (0, 255, 0), 2)
-        # print("Distance to red:" + str(min_distance))
-
-
     ###############################################
 
     ############DIRECTION CALCULATION##############
-
     # Calculate the angle between the line from the centroid to the "point" of the triangle and the vertical axis
-    dy_triangle = centroid[0][1] - point_vertex[0][1]  # Swap the order of subtraction to reverse the direction
+    dy_triangle = centroid[0][1] - point_vertex[0][1]
     dx_triangle = point_vertex[0][0] - centroid[0][0]
     angle_triangle = np.arctan2(dy_triangle, dx_triangle) * 180.0 / np.pi
 
     # Adjust the angle to be in the range of 0 to 360 degrees and go clockwise
     angle_triangle = (angle_triangle + 360) % 360
-
 
     # Calculate the angle from the centroid of the triangle to the target
     dy_target = centroid[0][1] - target[1]
@@ -353,33 +281,24 @@ while True:
     angle_target = np.arctan2(dy_target, dx_target) * 180.0 / np.pi
     angle_target = (angle_target + 360) % 360
 
-    # Find the ball that is farthest from the triangle
+    # Find the ball that is closest to the triangle
     distances = [np.linalg.norm(np.array(ball) - centroid[0]) for ball in balls]
-    if distances:  # Check if the list is not empty
+    if distances:
         closest_ball_index = np.argmin(distances)
 
     # Calculate the difference in angle
     angle_difference = angle_triangle - angle_target
-    angle_difference = (angle_difference + 360) % 360  # Adjust the difference to be in the range of 0 to 360 degrees
-
+    angle_difference = (angle_difference + 360) % 360
     ###############################################
 
-
-
-
     ############WHITE BALLS DETECTION##############
-
-    # Define range for white color
     lower_white = np.array([0, 0, 212])
     upper_white = np.array([140, 255, 255])
 
-    # Threshold the HSV image to get only white colors
     mask_white = cv2.inRange(hsv, lower_white, upper_white)
 
-    # Bitwise-AND mask and original image
     res_white = cv2.bitwise_and(frame, frame, mask=mask_white)
 
-    # Find contours in the white mask
     contours_white, _ = cv2.findContours(mask_white, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     balls = []
@@ -390,8 +309,8 @@ while True:
         if area > 30 and area < 100:
             perimeter = cv2.arcLength(contour, True)
             circularity = 3 * np.pi * (area / (perimeter * perimeter))
-            if 0.3 < circularity < 1.5:  # Less strict circularity check for balls
-                cv2.drawContours(frame, [contour], -1, (255, 0, 0), 3)  # White color for balls
+            if 0.3 < circularity < 1.5:
+                cv2.drawContours(frame, [contour], -1, (255, 0, 0), 3)
 
                 # Calculate the centroid of the ball
                 center, _ = cv2.minEnclosingCircle(contour)
@@ -399,18 +318,14 @@ while True:
                 # Calculate the distance from the ball to all red contours
                 distances = [cv2.pointPolygonTest(red_contour, center, True) for red_contour in contours_red]
 
-                # Only add the ball to the list if it's farther than 20 from all red contours
+                # Only add the ball to the list if it's farther than 45 from all red contours
                 if all(abs(distance) > 45 for distance in distances):
                     balls.append((round(center[0], 2), round(center[1], 2)))
-
     ###############################################
 
-
-
-    #############TIMER##############
-
+    ####################TIMER#####################
         elapsed_time = time.time() - start_time
-        remaining_time = max(timer_duration - elapsed_time, 0)  # Ensure remaining time doesn't go negative
+        remaining_time = max(timer_duration - elapsed_time, 0)
         minutes, seconds = divmod(remaining_time, 60)
         timer_text = f"{int(minutes):02d}:{int(seconds):02d}"
         
@@ -421,10 +336,8 @@ while True:
                     font_scale, 
                     font_color, 
                     line_type)
+    #############################################
 
-    ################################
-
-    # Show the frame
     cv2.imshow('Frame', frame)
 
     # Print every 1 second
@@ -438,7 +351,6 @@ while True:
             send_command('s')
             break
         
-        # Print the coordinates
         print("########################")
         print("Dropoff: " + str(dropoff))
         print("Drive to goal: " + str(drive_to_goal))
@@ -456,6 +368,7 @@ while True:
         if target[0] == 0.0 and target[1] == 0.0:
             if balls:
                 target = balls[closest_ball_index]
+                dropoff = False
             else:
                 target = left_point
                 dropoff = True
@@ -612,7 +525,6 @@ while True:
                 elif (distance_to_target < 40).any() and (angle_difference <= 10 or angle_difference >= 350):
                     send_command('pil op')
                     send_command('pil op')
-                    #kan måske ændres til pil ned
                 else:
                     send_command('pil op')
 
@@ -624,6 +536,8 @@ while True:
             distance_to_target = 1000
             dropoff = True
 
+    if len(balls) > 1:
+        dropoff = False
     ##################################################
 
     # Break the loop on 'q' key press
