@@ -166,6 +166,7 @@ while True:
         # Draw the bounding rectangle
         cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 0, 255), 2)  # Red rectangle
         rectangle_contour = np.array([
+            # Can add or subtract a bit from these values to expand the rectangle
             [[min_x, min_y]],
             [[max_x, min_y]],
             [[max_x, max_y]],
@@ -463,7 +464,7 @@ while True:
         elif min_distance < 75 and not drive_to_goal and not finished:
             print("CLOSE TO RED: " + str(min_distance))
 
-            # If the blue triangle is within a given length of a red contour
+            # If the triangle is within a given length of a red contour
             if closest_red_contour is not None:
                 # Calculate the direction towards the closest red contour from the point behind the triangle
                 dx = closest_point[0] - behind_x
