@@ -59,7 +59,7 @@ while True:
     command = clientsocket.recv(1024).decode('utf-8')
 
     if eatBalls:
-        test_arm.run(-700)
+        test_arm.run(-500)
     
     if command == 'FORWARD':
         left_wheel.run(200)
